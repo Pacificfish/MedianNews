@@ -19,18 +19,23 @@ async function getTopClusters() {
       center_article_id,
       right_article_id,
       blindspot_side,
-      importance_score
+      importance_score,
+      built_at,
+      topics!inner(
+        first_seen_at,
+        last_seen_at
+      )
     `)
     .order("importance_score", { ascending: false })
     .limit(30);
   
   if (error || !homepageTopics) {
     console.error("Error fetching homepage topics:", error);
-    return [];
+    return { topics: [], allUniqueSources: new Set<string>() };
   }
 
   if (homepageTopics.length === 0) {
-    return [];
+    return { topics: [], allUniqueSources: new Set<string>() };
   }
 
   // Fetch article details separately with source info
@@ -123,12 +128,17 @@ async function getTopClusters() {
     const stats = topicStats.get(topic.topic_id) || { left: 0, center: 0, right: 0 };
     const sourceCount = sourceCounts.get(topic.topic_id) || 0;
     const hasIncomplete = !topic.left_article_id || !topic.center_article_id || !topic.right_article_id;
+    
+    // Get dates from topics relation
+    const topicData = Array.isArray(topic.topics) ? topic.topics[0] : topic.topics;
+    const publishedAt = topicData?.first_seen_at || topic.built_at || new Date().toISOString();
+    const updatedAt = topicData?.last_seen_at || topic.built_at || new Date().toISOString();
 
     return {
       topic_id: topic.topic_id,
       title: topic.title,
-      published_at: topic.first_seen_at || new Date().toISOString(),
-      updated_at: topic.last_seen_at,
+      published_at: publishedAt,
+      updated_at: updatedAt,
       leftCount: stats.left,
       centerCount: stats.center,
       rightCount: stats.right,
