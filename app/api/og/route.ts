@@ -13,9 +13,8 @@ export async function GET(request: NextRequest) {
   };
 
   return new ImageResponse(
-    (
-      <div
-        style={{
+    <div
+      style={{
           fontSize: 60,
           background: "white",
           width: "100%",
@@ -79,8 +78,7 @@ export async function GET(request: NextRequest) {
         >
           {bias} Bias
         </div>
-      </div>
-    ),
+      </div>,
     {
       width: 1200,
       height: 630,

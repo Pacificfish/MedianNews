@@ -11,15 +11,8 @@ const nextConfig = {
   },
 }
 
-// Initialize cron jobs on server start (Railway-compatible)
-if (typeof window === "undefined" && (process.env.ENABLE_CRON === "true" || process.env.NODE_ENV === "production")) {
-  try {
-    const { initializeCronJobs } = require("./lib/cron");
-    initializeCronJobs();
-  } catch (error) {
-    console.error("Failed to initialize cron jobs:", error);
-  }
-}
+// Cron jobs will be initialized in a separate file that runs after build
+// See lib/cron-init.ts for initialization
 
 module.exports = nextConfig
 
