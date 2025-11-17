@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { ImageResponse } from "next/og";
+
+export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -12,9 +14,13 @@ export async function GET(request: NextRequest) {
     Right: "#FF3B3B",
   };
 
+  const biasColor = colors[bias as keyof typeof colors] || colors.Center;
+  const textColor = bias === "Center" ? "#1E293B" : "white";
+
   return new ImageResponse(
-    <div
-      style={{
+    (
+      <div
+        style={{
           fontSize: 60,
           background: "white",
           width: "100%",
@@ -70,15 +76,16 @@ export async function GET(request: NextRequest) {
             gap: "20px",
             padding: "20px 40px",
             borderRadius: "12px",
-            background: colors[bias as keyof typeof colors] || colors.Center,
-            color: bias === "Center" ? "#1E293B" : "white",
+            background: biasColor,
+            color: textColor,
             fontSize: "32px",
             fontWeight: "600",
           }}
         >
           {bias} Bias
         </div>
-      </div>,
+      </div>
+    ),
     {
       width: 1200,
       height: 630,
