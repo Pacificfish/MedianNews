@@ -99,7 +99,11 @@ async function handleRequest(request: NextRequest) {
       else if (!rightArticleId) blindspotSide = "Right";
 
       // Compute importance score with improved algorithm
-      const distinctSources = new Set(members.map((m: any) => m.articles?.sources?.name)).filter(Boolean).size;
+      const distinctSources = new Set(
+        members
+          .map((m: any) => m.articles?.sources?.name)
+          .filter((name: any) => name !== undefined && name !== null)
+      ).size;
       const totalArticles = members.length;
       
       // Coverage: More sources = better (normalized to 0-1, cap at 15 sources)
