@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 // This endpoint runs twice daily via Vercel Cron
 // It discovers new topics/articles and rebuilds the homepage
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Verify the request is from Vercel Cron
