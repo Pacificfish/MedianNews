@@ -3,18 +3,6 @@ import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { Providers } from "@/components/providers";
 
-// Initialize cron jobs on server start (Railway-compatible)
-if (typeof window === "undefined") {
-  try {
-    require("../lib/cron-init");
-  } catch (error) {
-    // Silently fail if cron init fails (e.g., during build)
-    if (process.env.NODE_ENV !== "production") {
-      console.log("Cron initialization skipped (development mode)");
-    }
-  }
-}
-
 export const metadata: Metadata = {
   title: "Median News - See every story clearly.",
   description: "Political bias analysis for news articles. Compare how different sides frame the same story.",
