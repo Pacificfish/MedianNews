@@ -59,51 +59,70 @@ async function getTopic(id: string) {
   // Group articles by side
   const leftArticles = members
     .filter((m) => m.side_label === "Left")
-    .map((m) => ({
-      id: m.articles.id,
-      title: m.articles.title,
-      url: m.articles.url,
-      source: m.articles.sources.name,
-      summary: m.articles.summary,
-      bias: (m.articles.bias_scores?.[0]?.leaning || "Left") as "Left" | "Center" | "Right",
-      score: m.articles.bias_scores?.[0]?.score || 20,
-      confidence: m.articles.bias_scores?.[0]?.confidence || 70,
-      publishedAt: m.articles.published_at,
-    }));
+    .map((m) => {
+      const article = Array.isArray(m.articles) ? m.articles[0] : m.articles;
+      const sources = Array.isArray(article.sources) ? article.sources[0] : article.sources;
+      const biasScores = Array.isArray(article.bias_scores) ? article.bias_scores : (article.bias_scores ? [article.bias_scores] : []);
+      return {
+        id: article.id,
+        title: article.title,
+        url: article.url,
+        source: sources?.name || "Unknown",
+        summary: article.summary,
+        bias: (biasScores[0]?.leaning || "Left") as "Left" | "Center" | "Right",
+        score: biasScores[0]?.score || 20,
+        confidence: biasScores[0]?.confidence || 70,
+        publishedAt: article.published_at,
+      };
+    });
 
   const centerArticles = members
     .filter((m) => m.side_label === "Center")
-    .map((m) => ({
-      id: m.articles.id,
-      title: m.articles.title,
-      url: m.articles.url,
-      source: m.articles.sources.name,
-      summary: m.articles.summary,
-      bias: (m.articles.bias_scores?.[0]?.leaning || "Center") as "Left" | "Center" | "Right",
-      score: m.articles.bias_scores?.[0]?.score || 50,
-      confidence: m.articles.bias_scores?.[0]?.confidence || 70,
-      publishedAt: m.articles.published_at,
-    }));
+    .map((m) => {
+      const article = Array.isArray(m.articles) ? m.articles[0] : m.articles;
+      const sources = Array.isArray(article.sources) ? article.sources[0] : article.sources;
+      const biasScores = Array.isArray(article.bias_scores) ? article.bias_scores : (article.bias_scores ? [article.bias_scores] : []);
+      return {
+        id: article.id,
+        title: article.title,
+        url: article.url,
+        source: sources?.name || "Unknown",
+        summary: article.summary,
+        bias: (biasScores[0]?.leaning || "Center") as "Left" | "Center" | "Right",
+        score: biasScores[0]?.score || 50,
+        confidence: biasScores[0]?.confidence || 70,
+        publishedAt: article.published_at,
+      };
+    });
 
   const rightArticles = members
     .filter((m) => m.side_label === "Right")
-    .map((m) => ({
-      id: m.articles.id,
-      title: m.articles.title,
-      url: m.articles.url,
-      source: m.articles.sources.name,
-      summary: m.articles.summary,
-      bias: (m.articles.bias_scores?.[0]?.leaning || "Right") as "Left" | "Center" | "Right",
-      score: m.articles.bias_scores?.[0]?.score || 80,
-      confidence: m.articles.bias_scores?.[0]?.confidence || 70,
-      publishedAt: m.articles.published_at,
-    }));
+    .map((m) => {
+      const article = Array.isArray(m.articles) ? m.articles[0] : m.articles;
+      const sources = Array.isArray(article.sources) ? article.sources[0] : article.sources;
+      const biasScores = Array.isArray(article.bias_scores) ? article.bias_scores : (article.bias_scores ? [article.bias_scores] : []);
+      return {
+        id: article.id,
+        title: article.title,
+        url: article.url,
+        source: sources?.name || "Unknown",
+        summary: article.summary,
+        bias: (biasScores[0]?.leaning || "Right") as "Left" | "Center" | "Right",
+        score: biasScores[0]?.score || 80,
+        confidence: biasScores[0]?.confidence || 70,
+        publishedAt: article.published_at,
+      };
+    });
 
   // Count unique sources and get source names
   const uniqueSources = new Set(
-    members.map((m) => m.articles.sources.name)
+    members.map((m) => {
+      const article = Array.isArray(m.articles) ? m.articles[0] : m.articles;
+      const sources = Array.isArray(article.sources) ? article.sources[0] : article.sources;
+      return sources?.name;
+    }).filter(Boolean)
   );
-  const sourceNames = Array.from(uniqueSources);
+  const sourceNames = Array.from(uniqueSources) as string[];
 
   return {
     topic,
