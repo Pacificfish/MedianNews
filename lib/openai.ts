@@ -106,6 +106,58 @@ Output strict JSON only:
   return JSON.parse(content) as CompareSummary;
 }
 
+/**
+ * Generate a high-quality summary for an article
+ */
+export async function generateArticleSummary(
+  title: string,
+  content: string,
+  maxLength: number = 200
+): Promise<string> {
+  const prompt = `You are a news editor. Write a concise, informative summary of the following article.
+
+Title: ${title}
+Content: ${content.substring(0, 2000)}
+
+Requirements:
+- Be objective and factual
+- Highlight the key points and main story
+- Write in clear, engaging prose
+- Maximum ${maxLength} characters
+- Do not include your opinion or analysis
+
+Summary:`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4-turbo-preview",
+    messages: [
+      {
+        role: "system",
+        content: "You are a professional news editor. Write concise, factual summaries.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.3,
+    max_tokens: Math.ceil(maxLength / 3), // Rough estimate: 3 chars per token
+  });
+
+  const summary = response.choices[0]?.message?.content?.trim() || "";
+  return summary.substring(0, maxLength);
+}
+
+/**
+ * Estimate reading time in minutes based on word count
+ */
+export function estimateReadingTime(text: string): number {
+  const wordsPerMinute = 200; // Average reading speed
+  const wordCount = text.split(/\s+/).length;
+  const minutes = Math.ceil(wordCount / wordsPerMinute);
+  return Math.max(1, minutes); // Minimum 1 minute
+}
+
 export interface PoliticalTopic {
   title: string;
   description: string;
@@ -113,41 +165,53 @@ export interface PoliticalTopic {
 }
 
 export async function discoverPoliticalTopics(): Promise<PoliticalTopic[]> {
-  const prompt = `You are a news analyst. Identify the top 10 HOTTEST and MOST CURRENT political topics/news stories happening RIGHT NOW in the United States.
+  const prompt = `You are an expert news analyst. Identify the top 12 HOTTEST and MOST CURRENT political topics/news stories happening RIGHT NOW in the United States.
 
-IMPORTANT: Focus on topics that are:
-- Breaking news from the last 24-48 hours
-- Currently trending on social media or news aggregators
-- Being actively discussed in political circles
-- Likely to have coverage from multiple news outlets with different political perspectives (Left, Center, Right)
+CRITICAL SELECTION CRITERIA - Prioritize topics that are:
+1. BREAKING NEWS: Stories from the last 12-24 hours (not older than 48 hours)
+2. HIGH IMPACT: Stories that affect many people, major policy changes, or significant events
+3. MULTI-PERSPECTIVE: Stories that will have coverage from Left, Center, and Right-leaning sources
+4. TRENDING: Stories currently trending on social media, news aggregators, or being actively discussed
+5. NEWSWORTHY: Major political developments, policy announcements, court decisions, elections, scandals, etc.
+
+AVOID:
+- Generic ongoing issues without a specific recent development
+- Stories older than 48 hours unless they have a major new development
+- Topics that only one political side would cover
+- Local-only stories (focus on national/international impact)
 
 For each topic, provide:
-- A clear, concise title (max 100 characters) that captures the current story
-- A brief description (1-2 sentences) explaining why it's hot/current
-- 7-10 highly specific search keywords/phrases that would help find articles about this EXACT topic
+- A clear, compelling title (max 100 characters) that captures the breaking news angle
+- A detailed description (2-3 sentences) explaining:
+  * What happened and when
+  * Why it's significant/trending right now
+  * Why it will have multi-perspective coverage
+- 8-12 highly specific search keywords/phrases that would help find articles about this EXACT topic
 
 CRITICAL KEYWORD REQUIREMENTS:
 - Keywords must be SPECIFIC and UNIQUE to this topic
-- Include proper nouns: full names of people, places, organizations, bills, laws
-- Include specific policy terms, event names, or legislation numbers
-- Avoid generic words that could match unrelated articles (e.g., avoid "reform", "efforts", "policy" alone)
+- Include proper nouns: full names of people, places, organizations, bills, laws, court cases
+- Include specific policy terms, event names, legislation numbers, dates
+- Include recent developments: "announces", "releases", "votes", "decides", "reports"
+- Avoid generic words that could match unrelated articles
 - Each keyword should be distinctive enough that articles matching 3+ keywords are almost certainly about this topic
 
-Examples of GOOD keywords:
-- "Affordable Care Act repeal", "Medicaid expansion", "health insurance premiums", "Joe Biden healthcare plan"
-- "Border Security Act 2024", "immigration detention centers", "asylum seekers", "Texas border"
-- "Federal Reserve interest rates", "inflation CPI", "Jerome Powell", "consumer price index"
+Examples of EXCELLENT keywords:
+- "Supreme Court abortion ruling", "Roe v Wade", "Dobbs decision", "reproductive rights", "Justice Alito"
+- "Biden student loan forgiveness", "Education Department", "debt cancellation", "federal student loans"
+- "January 6 committee report", "Capitol riot investigation", "Trump subpoena", "House select committee"
 
 Examples of BAD keywords (too generic):
 - "reform", "efforts", "policy", "government", "political", "legislation" (without context)
+- "election", "vote", "campaign" (without specific context)
 
 Output strict JSON only:
 {
   "topics": [
     {
-      "title": "Topic title here",
-      "description": "Brief description of why this is hot/current",
-      "keywords": ["specific", "keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7"]
+      "title": "Compelling, specific topic title",
+      "description": "2-3 sentences explaining what happened, why it's significant, and why it's trending now",
+      "keywords": ["specific", "keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7", "keyword8"]
     }
   ]
 }`;
@@ -164,7 +228,7 @@ Output strict JSON only:
         content: prompt,
       },
     ],
-    temperature: 0.8, // Slightly higher for more diverse/creative topic discovery
+    temperature: 0.7, // Balanced for diverse but focused topic discovery
     response_format: { type: "json_object" },
   });
 

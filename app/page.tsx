@@ -144,6 +144,7 @@ async function getTopClusters() {
       rightCount: stats.right,
       totalSources: sourceCount,
       hasIncompleteCoverage: hasIncomplete,
+      importanceScore: topic.importance_score || 0,
     };
   });
 

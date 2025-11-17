@@ -98,32 +98,52 @@ async function handleRequest(request: NextRequest) {
       else if (!centerArticleId) blindspotSide = "Center";
       else if (!rightArticleId) blindspotSide = "Right";
 
-      // Compute importance score
-      const distinctSources = new Set(members.map((m: any) => m.articles?.sources?.name)).size;
-      const coverageWeight = Math.min(distinctSources, 10) / 10;
+      // Compute importance score with improved algorithm
+      const distinctSources = new Set(members.map((m: any) => m.articles?.sources?.name)).filter(Boolean).size;
+      const totalArticles = members.length;
+      
+      // Coverage: More sources = better (normalized to 0-1, cap at 15 sources)
+      const coverageWeight = Math.min(distinctSources / 15, 1);
+      
+      // Article volume: More articles = more important (normalized, cap at 20 articles)
+      const volumeWeight = Math.min(totalArticles / 20, 1);
 
-      const latestArticleTime = Math.max(
-        leftArticleId ? new Date(articlesBySide.Left.find((a: any) => a.id === leftArticleId)?.published_at).getTime() : 0,
-        centerArticleId ? new Date(articlesBySide.Center.find((a: any) => a.id === centerArticleId)?.published_at).getTime() : 0,
-        rightArticleId ? new Date(articlesBySide.Right.find((a: any) => a.id === rightArticleId)?.published_at).getTime() : 0
-      );
-      const hoursSinceLatest = (now.getTime() - latestArticleTime) / (1000 * 60 * 60);
-      const recencyWeight = Math.exp(-hoursSinceLatest / 12);
+      // Find latest article time
+      const allArticleTimes = members
+        .map((m: any) => m.articles?.published_at)
+        .filter(Boolean)
+        .map((date: string) => new Date(date).getTime());
+      
+      const latestArticleTime = allArticleTimes.length > 0 ? Math.max(...allArticleTimes) : 0;
+      const hoursSinceLatest = latestArticleTime > 0 ? (now.getTime() - latestArticleTime) / (1000 * 60 * 60) : 999;
+      
+      // Recency: Exponential decay with half-life of 6 hours (faster decay for breaking news)
+      const recencyWeight = Math.exp(-hoursSinceLatest / 6);
 
+      // Authority: Average source authority score
       const allSourceAuthorities = members
         .map((m: any) => m.articles?.sources?.authority_score)
-        .filter(Boolean) as number[];
+        .filter((score: any) => score !== undefined && score !== null) as number[];
       const meanAuthority = allSourceAuthorities.length > 0
         ? allSourceAuthorities.reduce((sum, score) => sum + score, 0) / allSourceAuthorities.length
         : 0;
       const authorityWeight = meanAuthority;
 
+      // Perspective balance: Topics with all 3 perspectives score higher
+      const hasAllPerspectives = leftArticleId && centerArticleId && rightArticleId;
+      const balanceWeight = hasAllPerspectives ? 1.0 : 0.6;
+
+      // Engagement: Placeholder (would come from analytics)
       const engagementWeight = 0;
+
+      // Weighted importance score (prioritize recency and coverage)
       const importanceScore =
-        0.35 * coverageWeight +
-        0.35 * recencyWeight +
-        0.2 * authorityWeight +
-        0.1 * engagementWeight;
+        0.35 * recencyWeight +      // Breaking news gets priority
+        0.25 * coverageWeight +     // More sources = more important
+        0.15 * volumeWeight +       // More articles = more coverage
+        0.15 * authorityWeight +    // Higher quality sources
+        0.05 * balanceWeight +      // All perspectives present
+        0.05 * engagementWeight;    // User engagement (future)
 
       // Upsert into homepage_topics
       const { error: upsertError } = await supabase

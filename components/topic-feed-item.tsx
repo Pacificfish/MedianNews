@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
-import { ExternalLink, TrendingUp } from "lucide-react";
+import { ExternalLink, TrendingUp, Clock, Flame } from "lucide-react";
 
 interface TopicFeedItemProps {
   topicId: string;
@@ -16,6 +16,8 @@ interface TopicFeedItemProps {
   totalSources: number;
   country?: string;
   hasIncompleteCoverage?: boolean;
+  isTrending?: boolean;
+  importanceScore?: number;
 }
 
 export function TopicFeedItem({
@@ -29,28 +31,51 @@ export function TopicFeedItem({
   totalSources,
   country = "United States",
   hasIncompleteCoverage = false,
+  isTrending = false,
+  importanceScore = 0,
 }: TopicFeedItemProps) {
   const totalArticles = leftCount + centerCount + rightCount;
   const leftPercent = totalArticles > 0 ? Math.round((leftCount / totalArticles) * 100) : 0;
   const centerPercent = totalArticles > 0 ? Math.round((centerCount / totalArticles) * 100) : 0;
   const rightPercent = totalArticles > 0 ? Math.round((rightCount / totalArticles) * 100) : 0;
+  
+  // Determine if topic is "hot" (published in last 6 hours)
+  const hoursSincePublished = (Date.now() - new Date(publishedAt).getTime()) / (1000 * 60 * 60);
+  const isHot = hoursSincePublished < 6;
 
   return (
     <article className="border-b border-gray-200 dark:border-gray-700 pb-6 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors p-4 -mx-4 rounded">
       <Link href={`/topic/${topicId}`} className="block group">
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-[#DC2626] transition-colors leading-tight">
-              {title}
-            </h3>
-            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-3">
-              <span className="font-semibold">{totalSources} sources</span>
+            <div className="flex items-start gap-2 mb-2">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 group-hover:text-[#DC2626] transition-colors leading-tight flex-1">
+                {title}
+              </h3>
+              {(isTrending || isHot) && (
+                <div className="flex items-center gap-1 text-xs font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full flex-shrink-0">
+                  <Flame className="h-3 w-3" />
+                  {isHot ? "Hot" : "Trending"}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-3 flex-wrap">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{totalSources} sources</span>
               <span>•</span>
-              <span>{formatDistanceToNow(new Date(publishedAt), { addSuffix: true })}</span>
-              {updatedAt && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {formatDistanceToNow(new Date(publishedAt), { addSuffix: true })}
+              </span>
+              {updatedAt && updatedAt !== publishedAt && (
                 <>
                   <span>•</span>
                   <span>Updated {formatDistanceToNow(new Date(updatedAt), { addSuffix: true })}</span>
+                </>
+              )}
+              {totalArticles > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="font-medium">{totalArticles} articles</span>
                 </>
               )}
             </div>

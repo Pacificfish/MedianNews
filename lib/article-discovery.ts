@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeUrl, hashString } from "@/lib/utils";
-import { classifyBias, discoverPoliticalTopics, PoliticalTopic } from "@/lib/openai";
+import { classifyBias, discoverPoliticalTopics, PoliticalTopic, generateEmbedding, cosineSimilarity, generateArticleSummary, estimateReadingTime } from "@/lib/openai";
 import * as cheerio from "cheerio";
 import Parser from "rss-parser";
 import { Source } from "@/types";
@@ -17,18 +17,33 @@ interface FoundArticle {
 
 /**
  * Search Google News for articles about a topic
- * Searches multiple times with different keyword combinations to get more results
+ * Uses multiple search strategies to get comprehensive, recent results
  */
 async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> {
   const foundArticles: FoundArticle[] = [];
   const seenUrls = new Set<string>();
   
-  // Try multiple search queries to get more comprehensive results
+  // Generate topic embedding for relevance filtering
+  const topicText = `${topic.title} ${topic.description} ${topic.keywords.join(" ")}`;
+  let topicEmbedding: number[] | null = null;
+  try {
+    topicEmbedding = await generateEmbedding(topicText);
+  } catch (e) {
+    console.warn("Failed to generate topic embedding, skipping relevance filtering");
+  }
+  
+  // More comprehensive search queries
   const searchQueries = [
-    topic.keywords.slice(0, 5).join(" "), // First 5 keywords
+    topic.keywords.slice(0, 6).join(" "), // First 6 keywords (most specific)
+    topic.keywords.slice(0, 4).join(" "), // First 4 keywords
     topic.keywords.slice(0, 3).join(" "), // First 3 keywords (broader)
     topic.title, // Topic title itself
+    topic.keywords.slice(0, 2).join(" ") + " " + topic.keywords[2], // Alternative combination
   ];
+  
+  // Filter for recent articles only (last 48 hours)
+  const cutoffDate = new Date();
+  cutoffDate.setHours(cutoffDate.getHours() - 48);
 
   // Get all active sources from database (do this once)
   const supabase = createAdminClient();
@@ -57,8 +72,16 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
       }
 
       // Process each Google News item
-      for (const item of feed.items.slice(0, 100)) { // Check up to 100 results per query
+      for (const item of feed.items.slice(0, 150)) { // Check up to 150 results per query
         if (!item.link || !item.title) continue;
+        
+        // Filter by recency - only include articles from last 48 hours
+        if (item.pubDate) {
+          const pubDate = new Date(item.pubDate);
+          if (pubDate < cutoffDate) {
+            continue; // Skip articles older than 48 hours
+          }
+        }
 
         try {
           // Google News RSS links are redirects, extract actual URL
@@ -125,6 +148,22 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
             );
             
             if (nameMatch) {
+              // Verify relevance using embeddings if available
+              if (topicEmbedding) {
+                try {
+                  const articleText = `${item.title} ${item.contentSnippet || ""}`;
+                  const articleEmbedding = await generateEmbedding(articleText);
+                  const similarity = cosineSimilarity(topicEmbedding, articleEmbedding);
+                  
+                  // Only include if similarity is above threshold (0.75 = 75% similar)
+                  if (similarity < 0.75) {
+                    continue; // Skip irrelevant articles
+                  }
+                } catch (e) {
+                  // If embedding check fails, include the article anyway
+                }
+              }
+              
               foundArticles.push({
                 title: item.title,
                 url: normalizedUrl,
@@ -134,6 +173,22 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
               });
             }
             continue;
+          }
+
+          // Verify relevance using embeddings if available
+          if (topicEmbedding) {
+            try {
+              const articleText = `${item.title} ${item.contentSnippet || ""}`;
+              const articleEmbedding = await generateEmbedding(articleText);
+              const similarity = cosineSimilarity(topicEmbedding, articleEmbedding);
+              
+              // Only include if similarity is above threshold (0.75 = 75% similar)
+              if (similarity < 0.75) {
+                continue; // Skip irrelevant articles
+              }
+            } catch (e) {
+              // If embedding check fails, include the article anyway
+            }
           }
 
           foundArticles.push({
@@ -219,24 +274,55 @@ async function saveArticle(article: FoundArticle, topicId: string, side: "Left" 
     } else {
       // Fetch full article content for better summary
       let summary = article.snippet;
+      let fullContent = "";
       try {
         const response = await fetch(article.url, {
           headers: { "User-Agent": "MedianNews/1.0" },
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(8000),
         });
         if (response.ok) {
           const html = await response.text();
           const $ = cheerio.load(html);
+          
+          // Try to get meta description first
           const metaDesc = $('meta[property="og:description"]').attr("content") ||
                           $('meta[name="description"]').attr("content");
           if (metaDesc && metaDesc.length > 50) {
             summary = metaDesc;
           }
+          
+          // Extract article body for AI summary
+          const articleBody = $('article').text() || 
+                            $('.article-body').text() ||
+                            $('.post-content').text() ||
+                            $('.entry-content').text() ||
+                            $('main').text() ||
+                            $('body').text();
+          
+          if (articleBody && articleBody.length > 200) {
+            fullContent = articleBody.substring(0, 3000); // Limit for API
+          }
         }
       } catch (e) {
         // Use snippet if fetch fails
       }
+      
+      // Generate AI summary if we have content
+      if (fullContent && fullContent.length > 200) {
+        try {
+          const aiSummary = await generateArticleSummary(article.title, fullContent, 300);
+          if (aiSummary && aiSummary.length > 50) {
+            summary = aiSummary;
+          }
+        } catch (e) {
+          console.warn(`Failed to generate AI summary for "${article.title}":`, e);
+          // Fall back to existing summary
+        }
+      }
 
+      // Calculate reading time
+      const readingTime = estimateReadingTime(fullContent || summary);
+      
       // Insert article
       const { data: newArticle, error: articleError } = await supabase
         .from("articles")
@@ -246,7 +332,7 @@ async function saveArticle(article: FoundArticle, topicId: string, side: "Left" 
           canonical_url: article.url,
           title: article.title,
           summary: summary.substring(0, 500),
-          content_excerpt: summary.substring(0, 500),
+          content_excerpt: (fullContent || summary).substring(0, 1000),
           published_at: article.publishedAt || new Date().toISOString(),
           lang: article.source.language || "en",
           hash: articleHash,
