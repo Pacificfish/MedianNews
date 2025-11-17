@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
       // Calculate rank signals for each article
       for (const member of members) {
-        const article = member.articles;
+        const article = Array.isArray(member.articles) ? member.articles[0] : member.articles;
         if (!article) continue;
 
         const now = new Date();
@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
         const recency = Math.exp(-hoursSincePublished / 24);
 
         // Authority: from source
-        const authority = article.sources?.authority_score || 0.5;
+        const sources = Array.isArray(article.sources) ? article.sources[0] : article.sources;
+        const authority = sources?.authority_score || 0.5;
 
         // Coverage: number of distinct sources in topic (normalized)
         const distinctSources = new Set(
