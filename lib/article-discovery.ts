@@ -440,8 +440,22 @@ export async function discoverAndSaveTopics() {
   
   // Step 1: Discover topics using AI
   console.log("Discovering political topics...");
-  const topics = await discoverPoliticalTopics();
-  console.log(`Found ${topics.length} topics`);
+  let topics: any[] = [];
+  try {
+    topics = await discoverPoliticalTopics();
+    console.log(`Found ${topics.length} topics`);
+    
+    if (topics.length === 0) {
+      console.error("ERROR: No topics discovered by AI. This could mean:");
+      console.error("  - OpenAI API key is missing or invalid");
+      console.error("  - OpenAI API returned an error");
+      console.error("  - AI returned empty topics array");
+      throw new Error("No topics discovered. Check OpenAI API key and logs.");
+    }
+  } catch (error: any) {
+    console.error("Error discovering topics:", error);
+    throw new Error(`Failed to discover topics: ${error.message}`);
+  }
 
   let topicsCreated = 0;
   let articlesFound = 0;
@@ -451,9 +465,14 @@ export async function discoverAndSaveTopics() {
   for (const topic of topics) {
     try {
       console.log(`\nProcessing topic: "${topic.title}"`);
+      console.log(`  Keywords: ${topic.keywords?.join(", ") || "none"}`);
       
       // Get ALL articles from different perspectives
       const articles = await getArticlesForTopic(topic);
+      
+      if (!articles || (!articles.left && !articles.center && !articles.right)) {
+        console.log(`  WARNING: No articles found for topic "${topic.title}"`);
+      }
       
       // Count how many perspectives we have (need at least 1 article from each)
       const hasLeft = articles.left.length > 0;

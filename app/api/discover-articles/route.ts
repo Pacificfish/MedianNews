@@ -25,17 +25,31 @@ async function handleRequest(request: NextRequest) {
   }
 
   try {
+    console.log("Starting article discovery process...");
+    
+    // Check if OpenAI API key is set
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY environment variable is not set");
+    }
+    
     const result = await discoverAndSaveTopics();
+
+    console.log("Discovery complete:", result);
 
     return NextResponse.json({
       success: true,
       ...result,
-      message: `Created ${result.topicsCreated} topics with ${result.articlesFound} articles`,
+      message: result.topicsCreated > 0 
+        ? `Created ${result.topicsCreated} topics with ${result.articlesFound} articles`
+        : `Discovery completed but found 0 topics. Check logs for details. Topics discovered: ${result.topicsDiscovered}`,
     });
   } catch (error: any) {
     console.error("Discover articles error:", error);
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      { 
+        error: error.message || "Internal server error",
+        details: error.stack || "No additional details",
+      },
       { status: 500 }
     );
   }

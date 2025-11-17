@@ -237,8 +237,20 @@ Output strict JSON only:
     throw new Error("No response from OpenAI");
   }
 
-  const parsed = JSON.parse(content);
-  return parsed.topics || [];
+  try {
+    const parsed = JSON.parse(content);
+    const topics = parsed.topics || [];
+    
+    if (topics.length === 0) {
+      console.warn("WARNING: OpenAI returned 0 topics. Response:", content.substring(0, 500));
+    }
+    
+    return topics;
+  } catch (parseError: any) {
+    console.error("Error parsing OpenAI response:", parseError);
+    console.error("Response content:", content.substring(0, 1000));
+    throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
+  }
 }
 
 /**
