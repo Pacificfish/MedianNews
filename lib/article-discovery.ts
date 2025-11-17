@@ -32,18 +32,44 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
     console.warn("Failed to generate topic embedding, skipping relevance filtering");
   }
   
-  // More comprehensive search queries
-  const searchQueries = [
-    topic.keywords.slice(0, 6).join(" "), // First 6 keywords (most specific)
-    topic.keywords.slice(0, 4).join(" "), // First 4 keywords
-    topic.keywords.slice(0, 3).join(" "), // First 3 keywords (broader)
-    topic.title, // Topic title itself
-    topic.keywords.slice(0, 2).join(" ") + " " + topic.keywords[2], // Alternative combination
-  ];
+  // Generate comprehensive search queries - use ALL keywords in various combinations
+  const searchQueries: string[] = [];
   
-  // Filter for recent articles only (last 48 hours)
+  // Add the topic title
+  searchQueries.push(topic.title);
+  
+  // Add all keywords as a single query
+  if (topic.keywords.length > 0) {
+    searchQueries.push(topic.keywords.join(" "));
+  }
+  
+  // Add keyword combinations of different lengths
+  for (let len = Math.min(topic.keywords.length, 8); len >= 2; len--) {
+    searchQueries.push(topic.keywords.slice(0, len).join(" "));
+  }
+  
+  // Add quoted phrase searches for exact matches (important keywords)
+  const importantKeywords = topic.keywords.slice(0, 4); // First 4 are usually most important
+  for (const keyword of importantKeywords) {
+    if (keyword.length > 3) { // Only quote keywords longer than 3 chars
+      searchQueries.push(`"${keyword}"`);
+    }
+  }
+  
+  // Add combinations of 2-3 important keywords
+  for (let i = 0; i < Math.min(importantKeywords.length, 3); i++) {
+    for (let j = i + 1; j < Math.min(importantKeywords.length, 4); j++) {
+      searchQueries.push(`${importantKeywords[i]} ${importantKeywords[j]}`);
+    }
+  }
+  
+  // Remove duplicates and empty queries
+  const uniqueQueries = Array.from(new Set(searchQueries.filter(q => q.trim().length > 0)));
+  console.log(`  Generated ${uniqueQueries.length} search queries for topic: "${topic.title}"`);
+  
+  // Filter for recent articles (extend to 72 hours to catch more articles)
   const cutoffDate = new Date();
-  cutoffDate.setHours(cutoffDate.getHours() - 48);
+  cutoffDate.setHours(cutoffDate.getHours() - 72);
 
   // Get all active sources from database (do this once)
   const supabase = createAdminClient();
@@ -57,9 +83,17 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
     return [];
   }
 
-  // Search with each query
-  for (const searchQuery of searchQueries) {
+  // Search with each query - comprehensive search to get ALL articles
+  for (let i = 0; i < uniqueQueries.length; i++) {
+    const searchQuery = uniqueQueries[i];
     if (!searchQuery.trim()) continue;
+    
+    // Small delay between queries to avoid rate limiting (except for first query)
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
+    }
+    
+    console.log(`    Searching with query ${i + 1}/${uniqueQueries.length}: "${searchQuery}"`);
     
     // Google News RSS feed URL
     const googleNewsRssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
@@ -71,15 +105,16 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
         continue;
       }
 
-      // Process each Google News item
-      for (const item of feed.items.slice(0, 150)) { // Check up to 150 results per query
+      // Process ALL items from the feed (Google News RSS typically returns up to 100 items)
+      // Process all items to get comprehensive coverage
+      for (const item of feed.items) {
         if (!item.link || !item.title) continue;
         
-        // Filter by recency - only include articles from last 48 hours
+        // Filter by recency - include articles from last 72 hours
         if (item.pubDate) {
           const pubDate = new Date(item.pubDate);
           if (pubDate < cutoffDate) {
-            continue; // Skip articles older than 48 hours
+            continue; // Skip articles older than 72 hours
           }
         }
 
@@ -149,18 +184,19 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
             
             if (nameMatch) {
               // Verify relevance using embeddings if available
+              // Lower threshold (0.70) to catch more relevant articles
               if (topicEmbedding) {
                 try {
                   const articleText = `${item.title} ${item.contentSnippet || ""}`;
                   const articleEmbedding = await generateEmbedding(articleText);
                   const similarity = cosineSimilarity(topicEmbedding, articleEmbedding);
                   
-                  // Only include if similarity is above threshold (0.75 = 75% similar)
-                  if (similarity < 0.75) {
+                  // Lower threshold to 0.70 (70% similar) to get more articles
+                  if (similarity < 0.70) {
                     continue; // Skip irrelevant articles
                   }
                 } catch (e) {
-                  // If embedding check fails, include the article anyway
+                  // If embedding check fails, include the article anyway (better to include than miss)
                 }
               }
               
@@ -176,18 +212,19 @@ async function searchGoogleNews(topic: PoliticalTopic): Promise<FoundArticle[]> 
           }
 
           // Verify relevance using embeddings if available
+          // Lower threshold (0.70) to catch more relevant articles
           if (topicEmbedding) {
             try {
               const articleText = `${item.title} ${item.contentSnippet || ""}`;
               const articleEmbedding = await generateEmbedding(articleText);
               const similarity = cosineSimilarity(topicEmbedding, articleEmbedding);
               
-              // Only include if similarity is above threshold (0.75 = 75% similar)
-              if (similarity < 0.75) {
+              // Lower threshold to 0.70 (70% similar) to get more articles
+              if (similarity < 0.70) {
                 continue; // Skip irrelevant articles
               }
             } catch (e) {
-              // If embedding check fails, include the article anyway
+              // If embedding check fails, include the article anyway (better to include than miss)
             }
           }
 
