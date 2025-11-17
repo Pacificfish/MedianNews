@@ -1,0 +1,11 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/discover-and-update",
+      "schedule": "0 6,18 * * *"
+    }
+  ]
+}
+
+
+
