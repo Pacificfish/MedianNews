@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.CRON_SECRET || "local_dev_secret"}`,
+          Authorization: `Bearer ${cronSecret}`,
         },
       }
     );
